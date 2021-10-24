@@ -1,3 +1,5 @@
+import time
+from dataclasses import astuple
 from typing import Optional, Tuple
 
 import cv2
@@ -6,30 +8,60 @@ from win32con import *
 import numpy as np
 
 from datastructures import Point
+from utils import MakeLeftClick
 
 
 class Window:
     hwnd: int
 
     def __init__(self, hwnd):
+        if hwnd is None or hwnd == 0:
+            raise Exception(f"Window handle '{hwnd}' is invalid")
         self.emtpyDc = None
         self.hwnd = hwnd
         self.cache = {}
+        self.windowState = None
+
+    def clickOnImage(self,imagePath: str, confidence=0.9) -> bool:
+        self.EnterRenderMode()
+        positionOnClient, positionOnScreen = self.findImage(imagePath, confidence)
+
+        if positionOnClient is None:
+            return False
+
+        lparam = win32api.MAKELONG(*astuple(positionOnClient))
+
+        mousePosition = win32gui.GetCursorPos()
+
+        win32api.SetCursorPos(positionOnScreen.asTuple())
+
+        win32api.SendMessage(self.hwnd, WM_MOUSEMOVE, 0, lparam)
+
+        win32api.SendMessage(self.hwnd, WM_LBUTTONDOWN, 0, lparam)
+
+        win32api.SendMessage(self.hwnd, WM_MOUSEMOVE, 0, lparam)
+
+        time.sleep(.1)
+
+        win32api.SendMessage(self.hwnd, WM_LBUTTONUP, 0, lparam)
+
+        win32api.SetCursorPos(mousePosition)
+
+        self.ExitRenderMode()
+
+        return True
+
 
     def getScreenCapture(self, captureMinimized=False) -> Tuple[any,Optional[Point]]:
         isMinimized = win32gui.IsIconic(self.hwnd)
         specialCapture = isMinimized and captureMinimized
-        windowState = win32api.GetWindowLong(self.hwnd, GWL_EXSTYLE)
 
         if isMinimized and not captureMinimized:
             return None, None
 
         ####### Restore Window and Make It Invisible ########
         if specialCapture:
-            win32api.SetWindowLong(self.hwnd, GWL_EXSTYLE, windowState | WS_EX_LAYERED)
-            win32gui.SetLayeredWindowAttributes(self.hwnd, 0, 1, LWA_ALPHA)
-            win32gui.ShowWindow(self.hwnd, SW_RESTORE)
-            win32api.SendMessage(self.hwnd, WM_PAINT, 0, 0)
+            self.EnterRenderMode()
         #####################################################
 
         # Get some data about the window and client area
@@ -59,8 +91,7 @@ class Window:
 
         ####### Minimize Window and Make It Visible #########
         if specialCapture:
-            win32gui.ShowWindow(self.hwnd, SW_MINIMIZE)
-            win32api.SetWindowLong(self.hwnd, GWL_EXSTYLE, windowState)
+            self.ExitRenderMode()
         #####################################################
 
         # Saves debug file
@@ -87,30 +118,40 @@ class Window:
         # Make it C_CONTIGUOUS
         image = np.ascontiguousarray(image)
 
-        position = Point(windowLeft + difX, windowTop + difY)
+        clientPosition = Point(windowLeft + difX, windowTop + difY)
 
-        return image, position
+        return image, clientPosition
 
-    # TODO: How to interpret result from match template
-    def findImage(self, imagePath: str, confidence=0.9) -> Tuple[Optional[Point], Optional[Point]]:
+    def findImage(self, imagePath: str, confidence) -> Tuple[Optional[Point], Optional[Point]]:
         template = self.cache.get(imagePath)
         if template is None:
             template = cv2.imread(imagePath)
             self.cache[imagePath] = template
 
-        image, parentPosition = self.getScreenCapture()
+        image, clientPosition = self.getScreenCapture()
 
         result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
 
-        # cv2.imshow("result", result)
-        # cv2.waitKey(1)
-
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
-
-        print(f"Min: {min_val}, Max: {max_val}. Best Loc: {max_loc}")
 
         if max_val < confidence:
             return None, None
 
-        return Point(*max_loc), parentPosition
+        positionOnClient = Point(*max_loc)
+        positionOnScreen = clientPosition + positionOnClient
 
+        return positionOnClient, positionOnScreen
+
+    def EnterRenderMode(self):
+        if win32gui.IsIconic(self.hwnd):
+            self.windowState = win32api.GetWindowLong(self.hwnd, GWL_EXSTYLE)
+            win32api.SetWindowLong(self.hwnd, GWL_EXSTYLE, self.windowState | WS_EX_LAYERED)
+            win32gui.SetLayeredWindowAttributes(self.hwnd, 0, 1, LWA_ALPHA)
+            win32gui.ShowWindow(self.hwnd, SW_RESTORE)
+            win32api.SendMessage(self.hwnd, WM_PAINT, 0, 0)
+
+    def ExitRenderMode(self):
+        if self.windowState is not None:
+            win32gui.ShowWindow(self.hwnd, SW_MINIMIZE)
+            win32api.SetWindowLong(self.hwnd, GWL_EXSTYLE, self.windowState)
+            self.windowState = None

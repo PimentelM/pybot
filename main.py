@@ -14,20 +14,11 @@ async def main():
 
 
     while True:
-        iconPt, parentPt = game.findImage('./Images/Play.png')
-        print(f"Play: {iconPt}")
-        image, _ = game.getScreenCapture()
-        radius = 10
-        color = [250,0,0]
-        # draw our random circle on the canvas
-        if iconPt:
-            cv2.circle(image, astuple(iconPt), radius, color, -1)
-            #win32api.SetCursorPos(astuple(iconPt + parentPt))
+        print(game.clickOnImage("./Images/Play.png"))
 
-        cv2.imshow('output', image)
-        cv2.waitKey(50)
-        time.sleep(0.001)
+        break
 
+    game.ExitRenderMode()
 
 
 
