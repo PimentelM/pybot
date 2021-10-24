@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import cv2
 import win32gui, win32ui, win32api
@@ -16,14 +16,13 @@ class Window:
         self.hwnd = hwnd
         self.cache = {}
 
-    def getScreenCapture(self, captureMinimized=False):
-        result = None
+    def getScreenCapture(self, captureMinimized=False) -> Tuple[any,Optional[Point]]:
         isMinimized = win32gui.IsIconic(self.hwnd)
         specialCapture = isMinimized and captureMinimized
         windowState = win32api.GetWindowLong(self.hwnd, GWL_EXSTYLE)
 
         if isMinimized and not captureMinimized:
-            return None
+            return None, None
 
         ####### Restore Window and Make It Invisible ########
         if specialCapture:
@@ -37,6 +36,8 @@ class Window:
         left, top, right, bot = win32gui.GetWindowRect(self.hwnd)
         windowWidth = right - left
         windowHeight = bot - top
+        windowTop = top
+        windowLeft = left
 
         left, top, right, bot = win32gui.GetClientRect(self.hwnd)
         clientWidth = right - left
@@ -86,28 +87,30 @@ class Window:
         # Make it C_CONTIGUOUS
         image = np.ascontiguousarray(image)
 
-        return image
+        position = Point(windowLeft + difX, windowTop + difY)
+
+        return image, position
 
     # TODO: How to interpret result from match template
-    def findImage(self, imagePath: str, confidence=0.9) -> Optional[Point]:
+    def findImage(self, imagePath: str, confidence=0.9) -> Tuple[Optional[Point], Optional[Point]]:
         template = self.cache.get(imagePath)
         if template is None:
             template = cv2.imread(imagePath)
             self.cache[imagePath] = template
 
-        screen = self.getScreenCapture()
-        image = cv2.cvtColor(np.array(screen), cv2.COLOR_RGB2BGR)
+        image, parentPosition = self.getScreenCapture()
 
-        result = cv2.matchTemplate(screen, template, cv2.TM_CCOEFF_NORMED)
+        result = cv2.matchTemplate(image, template, cv2.TM_CCOEFF_NORMED)
 
-        cv2.imshow("result", result)
-        cv2.waitKey(1)
+        # cv2.imshow("result", result)
+        # cv2.waitKey(1)
 
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(result)
 
         print(f"Min: {min_val}, Max: {max_val}. Best Loc: {max_loc}")
 
         if max_val < confidence:
-            return None
+            return None, None
 
-        return Point(*max_loc)
+        return Point(*max_loc), parentPosition
+

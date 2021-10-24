@@ -1,6 +1,7 @@
 from dataclasses import astuple
 
 import numpy as np
+import win32api
 import win32gui
 from window import Window
 import time
@@ -13,14 +14,15 @@ async def main():
 
 
     while True:
-        pt = game.findImage('./Images/Play.png')
-        print(f"Play: {pt}")
-        image = game.getScreenCapture()
+        iconPt, parentPt = game.findImage('./Images/Play.png')
+        print(f"Play: {iconPt}")
+        image, _ = game.getScreenCapture()
         radius = 10
         color = [250,0,0]
         # draw our random circle on the canvas
-        if pt:
-            cv2.circle(image, astuple(pt), radius, color, -1)
+        if iconPt:
+            cv2.circle(image, astuple(iconPt), radius, color, -1)
+            #win32api.SetCursorPos(astuple(iconPt + parentPt))
 
         cv2.imshow('output', image)
         cv2.waitKey(50)
