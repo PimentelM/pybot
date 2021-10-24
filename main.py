@@ -19,7 +19,8 @@ async def main():
         radius = 10
         color = [250,0,0]
         # draw our random circle on the canvas
-        cv2.circle(image, astuple(pt), radius, color, -1)
+        if pt:
+            cv2.circle(image, astuple(pt), radius, color, -1)
 
         cv2.imshow('output', image)
         cv2.waitKey(50)
